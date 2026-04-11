@@ -1,0 +1,14 @@
+# Session logs (personal data)
+logs/sessions/*.jsonl
+
+# Temp files
+/tmp/
+*.pyc
+__pycache__/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Phone state
+/tmp/.phone-*

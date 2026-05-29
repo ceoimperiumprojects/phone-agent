@@ -44,8 +44,36 @@ _log_action() {
 case "${1:-help}" in
 
   connect)
+    # Layer 1: Try saved 5555 connection
     adb connect "$DEVICE" 2>/dev/null
-    $ADB shell echo "connected" 2>/dev/null && echo "OK: Connected to $DEVICE" || echo "FAIL: Cannot reach $DEVICE"
+    if $ADB shell echo "ok" >/dev/null 2>&1; then
+      echo "OK: Connected to $DEVICE"
+      exit 0
+    fi
+
+    # Layer 2: SSH in, find wireless debug port, flip to 5555
+    echo "5555 cold — trying SSH recovery via phone:8022..."
+    if ! nc -z -w 3 192.168.1.146 8022 2>/dev/null; then
+      echo "FAIL: SSH port 8022 also down. Phone likely asleep — unlock screen, then rerun."
+      exit 1
+    fi
+
+    # Port scan for wireless-debug port (Android restricts /proc/net/tcp)
+    echo "Scanning for wireless-debug port (30000-50000)..."
+    WDPORT=$(for p in $(seq 30000 2 49998); do (echo >/dev/tcp/192.168.1.146/$p) 2>/dev/null && echo $p & done; wait | head -1)
+    if [ -n "$WDPORT" ] && [ "$WDPORT" != "8022" ]; then
+      echo "Found wireless-debug port: $WDPORT"
+      adb connect "192.168.1.146:$WDPORT" 2>/dev/null
+      sleep 1
+      if adb -s "192.168.1.146:$WDPORT" tcpip 5555 >/dev/null 2>&1; then
+        sleep 2
+        adb connect "$DEVICE" 2>/dev/null
+        $ADB shell echo ok >/dev/null 2>&1 && echo "OK: Recovered, connected to $DEVICE" && exit 0
+      fi
+    fi
+
+    echo "FAIL: Auto-recovery failed. On phone: Settings → Developer options → Wireless debugging (turn ON), then rerun."
+    exit 1
     ;;
 
   nav)
